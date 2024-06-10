@@ -1,11 +1,12 @@
 {
   "name": "json-in-elm",
   "scripts": {
-    "test": "elm-test-rs --watch"
+    "start": "vite --host",
+    "test": "npx elm-test-rs --watch"
   },
   "dependencies": {
-    "elm": "0.19.1-6",
-    "elm-test-rs": "3.0.0-5"
+    "vite": "^5.2.13",
+    "vite-plugin-elm": "^3.0.1"
   },
   "devDependencies": {
     "elm-tooling": "^1.15.1"
