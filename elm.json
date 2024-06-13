@@ -3,7 +3,7 @@
     "name": "jmpavlick/json-in-elm",
     "summary": "Work with arbitrary JSON values, in Elm",
     "license": "MIT",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "Json.InElm",
         "Json.InElm.Keypath"
@@ -21,8 +21,8 @@
         "rtfeldman/elm-iso8601-date-strings": "1.1.4 <= v < 2.0.0"
     },
     "test-dependencies": {
-        "elm-explorations/test": "2.1.2 <= v < 3.0.0",
         "elm/bytes": "1.0.8 <= v < 2.0.0",
-        "elm/random": "1.0.0 <= v < 2.0.0"
+        "elm/random": "1.0.0 <= v < 2.0.0",
+        "elm-explorations/test": "2.1.2 <= v < 3.0.0"
     }
 }

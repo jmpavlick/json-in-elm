@@ -25,7 +25,7 @@ If that sounds like a situation that you need to handle, well, congratulations: 
 ``` elm
 node : Result Json.Decode.Error Json.InElm.Node
 node =
-    Json.InElm.parseJsonString rawJwon
+    Json.InElm.parseJsonString rawJson
 
 rawJson : String
 rawJson =
