@@ -2,6 +2,7 @@
   "name": "json-in-elm",
   "scripts": {
     "start": "vite --host",
+    "preview": "elm-doc-preview -p 8080",
     "test": "npx elm-test-rs --watch"
   },
   "dependencies": {
@@ -9,6 +10,7 @@
     "vite-plugin-elm": "^3.0.1"
   },
   "devDependencies": {
+    "elm-doc-preview": "^5.0.5",
     "elm-tooling": "^1.15.1"
   }
 }

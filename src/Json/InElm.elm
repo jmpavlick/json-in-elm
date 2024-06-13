@@ -1,4 +1,68 @@
-module Json.InElm exposing (..)
+module Json.InElm exposing
+    ( JValue(..)
+    , JProp(..)
+    , Keypath
+    , Node
+    , parseJsonString
+    , parseValue
+    , parseValueAt
+    , toDecoder
+    , toNodes
+    , toString
+    , toInt
+    , toFloat
+    , toBool
+    , toTime
+    , toList
+    , toObject
+    , toNull
+    , view
+    )
+
+{-|
+
+
+# JSON Document and Property Types
+
+A "JSON document", here, is described as:
+
+  - A JSON object
+  - A list of JSON objects or scalar properties
+
+For convenience, even though it's not in the JSON spec, I have included ISO8601 timestamp values as a "JSON property type".
+
+@docs JValue
+@docs JProp
+@docs Keypath
+@docs Node
+
+
+# Parsing
+
+@docs parseJsonString
+@docs parseValue
+@docs parseValueAt
+@docs toDecoder
+
+
+# Retrieving values from a `JValue`
+
+@docs toNodes
+@docs toString
+@docs toInt
+@docs toFloat
+@docs toBool
+@docs toTime
+@docs toList
+@docs toObject
+@docs toNull
+
+
+# Viewing a `Node`
+
+@docs view
+
+-}
 
 import Dict
 import Html
@@ -6,25 +70,17 @@ import Html.Events
 import Iso8601
 import Json.Decode
 import Json.Encode
+import Json.InElm.Keypath
+import Json.InElm.Keypath.Internal
 import Time
 
 
-type KeyPath
-    = KeyPath (List FieldAccessor)
+
+-- JSON Document and Property Types
 
 
-initKeyPath : KeyPath
-initKeyPath =
-    KeyPath []
-
-
-type alias Node =
-    { value : JValue
-    , keyPath : KeyPath
-    , jType : Maybe JType
-    }
-
-
+{-| A `JValue` represents a typed value within a JSON document.
+-}
 type JValue
     = JString String
     | JInt Int
@@ -36,208 +92,218 @@ type JValue
     | JNull
 
 
-type JType
-    = TString
-    | TInt
-    | TFloat
-    | TBool
-    | TTime
-    | TNull
+{-| A `JProp` represents the type of a scalar property within a JSON document. These are regarded separately
+from the `JValue` type for a few important reasons:
+
+  - Since this package is concerned with parsing an arbitrary JSON document and lifting it into a type that allows it to be
+    used within an Elm program, this means that the JSON schema is derived ad-hoc from user input.
+  - And so, an ad-hoc JSON schema cannot exist without values.
+  - However, if we are going to to store references to locations within that ad-hoc JSON schema, we are likely doing so because
+    we would like to retrieve some value at a given location from a JSON document that is different from the original input.
+
+In order to create a distinction between "a parsed JSON value" and "a reference to a location within a JSON document", it must
+be the case that we have another way to represent the concept of "the expected type of a value at a location within a JSON document"
+that is separate from "a value at a location within a JSON document, from which the type is derived".
+
+Creating a second type was the most straightforward way to implement this behavior.
+
+-}
+type JProp
+    = PString
+    | PInt
+    | PFloat
+    | PBool
+    | PTime
+    | PNull
 
 
-type FieldAccessor
-    = At String
-    | Index Int
+{-| A `Keypath` is a data structure that stores the JSON path to a value of a given key.
+
+Elements in a `Keypath` are either the name of a field, or the index of an array.
+
+Use the functions in the `Json.InElm.Keypath` module to work with `Keypath` values.
+
+-}
+type alias Keypath =
+    Json.InElm.Keypath.Internal.Keypath
 
 
-at : String -> KeyPath -> KeyPath
-at string (KeyPath kp) =
-    KeyPath <| At string :: kp
+{-| A `Node` is a reprentation of part of a JSON document, along with everything that is inside of it,
+along with its "key path", which is its location within a JSON document.
+
+This means that the output of the parser will always be a single `Node`; but depending on the input,
+that `Node`'s `JValue` may have other `Node`s inside of it.
+
+-}
+type alias Node =
+    { value : JValue
+    , keypath : Keypath
+    , jProp : Maybe JProp
+    }
 
 
-index : Int -> KeyPath -> KeyPath
-index int (KeyPath kp) =
-    KeyPath <| Index int :: kp
+
+-- Parsing
 
 
-withPath : KeyPath -> Node -> Node
-withPath pathBuilder node =
-    let
-        withPathSoFar : Node
-        withPathSoFar =
-            { node
-                | keyPath = pathBuilder
-            }
-    in
-    case node.value of
-        JString _ ->
-            withPathSoFar
-
-        JInt _ ->
-            withPathSoFar
-
-        JFloat _ ->
-            withPathSoFar
-
-        JBool _ ->
-            withPathSoFar
-
-        JNull ->
-            withPathSoFar
-
-        JTime _ ->
-            withPathSoFar
-
-        JList value ->
-            { withPathSoFar
-                | value =
-                    JList
-                        (List.indexedMap (\k v -> withPath (index k pathBuilder) v) value)
-            }
-
-        JObject value ->
-            { withPathSoFar
-                | value =
-                    JObject
-                        (List.map
-                            (\( k, v ) ->
-                                ( k, withPath (at k pathBuilder) v )
-                            )
-                            value
-                        )
-            }
-
-
-toJType : JValue -> Maybe JType
-toJType jValue =
-    case jValue of
-        JString _ ->
-            Just TString
-
-        JInt _ ->
-            Just TInt
-
-        JFloat _ ->
-            Just TFloat
-
-        JBool _ ->
-            Just TBool
-
-        JNull ->
-            Just TNull
-
-        JTime _ ->
-            Just TTime
-
-        JList _ ->
-            Nothing
-
-        JObject _ ->
-            Nothing
-
-
-nodeDecoder : Json.Decode.Decoder Node
-nodeDecoder =
-    let
-        build v =
-            { value = v, keyPath = initKeyPath, jType = toJType v }
-    in
-    Json.Decode.lazy
-        (\() ->
-            Json.Decode.oneOf
-                [ Json.Decode.map (build << JString) Json.Decode.string
-                , Json.Decode.map (build << JInt) Json.Decode.int
-                , Json.Decode.map (build << JFloat) Json.Decode.float
-                , Json.Decode.map (build << JBool) Json.Decode.bool
-                , Json.Decode.map (build << JList) (Json.Decode.list (Json.Decode.lazy (\() -> nodeDecoder)))
-                , Json.Decode.map (build << JObject) (Json.Decode.keyValuePairs (Json.Decode.lazy (\() -> nodeDecoder)))
-                , Json.Decode.null (build JNull)
-                , Json.Decode.map (build << JTime) Iso8601.decoder
-                ]
-        )
-
-
+{-| Parse a `Json.Decode.Value` to a `Node`.
+-}
 parseValue : Json.Decode.Value -> Result Json.Decode.Error Node
 parseValue =
     Json.Decode.decodeValue
-        (Json.Decode.map (withPath initKeyPath) nodeDecoder)
+        --(Json.Decode.map (withPath Json.InElm.Keypath.init) nodeDecoder)
+        (Json.Decode.map (withPath Json.InElm.Keypath.init) (toDecoder Json.InElm.Keypath.init))
 
 
+{-| Parse a `Json.Decode.Value` to a `Node`, at a given `KeyPath`.
+-}
+parseValueAt : Keypath -> Json.Decode.Value -> Result Json.Decode.Error Node
+parseValueAt keypath =
+    Json.Decode.decodeValue <| toDecoder keypath
+
+
+{-| Parse a raw JSON string to a `Node`.
+-}
 parseJsonString : String -> Result Json.Decode.Error Node
 parseJsonString =
     Json.Decode.decodeString Json.Decode.value
         >> Result.andThen parseValue
 
 
-
-{- the things we need, now, are:
-
-   - an encoder / decoder pair for these json types
-   - a way to render them in the view (i.e., a view combinator)
-
+{-| Create a decoder to a `Node`, given a `Keypath`.
 -}
-
-
-keyPathToString : KeyPath -> String
-keyPathToString (KeyPath kp) =
-    List.foldl
-        (\step acc ->
-            acc
-                ++ (case step of
-                        Index i ->
-                            String.concat [ "[", String.fromInt i, "]" ]
-
-                        At f ->
-                            String.concat [ ".", f ]
-                   )
-        )
-        ""
-        kp
-
-
-runtimeDecoder : KeyPath -> JType -> Json.Decode.Value -> Result Json.Decode.Error JValue
-runtimeDecoder (KeyPath kp) jType =
+toDecoder : Keypath -> Json.Decode.Decoder Node
+toDecoder keypath =
     let
         builder : Json.Decode.Decoder a -> Json.Decode.Decoder a
         builder =
-            List.foldl
-                (\step acc ->
-                    acc
-                        >> (case step of
-                                At str ->
-                                    Json.Decode.field str
-
-                                Index i ->
-                                    Json.Decode.index i
-                           )
-                )
+            Json.InElm.Keypath.fold
+                (>>)
+                { fromIndex = Json.Decode.index
+                , fromAt = Json.Decode.field
+                }
                 identity
-                kp
+                keypath
 
-        jDecoder : Json.Decode.Decoder JValue
-        jDecoder =
-            case jType of
-                TString ->
-                    Json.Decode.map JString <| builder Json.Decode.string
-
-                TInt ->
-                    Json.Decode.map JInt <| builder Json.Decode.int
-
-                TFloat ->
-                    Json.Decode.map JFloat <| builder Json.Decode.float
-
-                TBool ->
-                    Json.Decode.map JBool <| builder Json.Decode.bool
-
-                TNull ->
-                    Json.Decode.succeed JNull
-
-                TTime ->
-                    Json.Decode.map JTime <| builder Iso8601.decoder
+        build v =
+            { value = v
+            , keypath = keypath
+            , jProp = toJProp v
+            }
     in
-    Json.Decode.decodeValue jDecoder
+    Json.Decode.lazy
+        (\() ->
+            Json.Decode.oneOf
+                [ Json.Decode.map (build << JString) <| builder Json.Decode.string
+                , Json.Decode.map (build << JInt) Json.Decode.int
+                , Json.Decode.map (build << JFloat) Json.Decode.float
+                , Json.Decode.map (build << JBool) Json.Decode.bool
+                , Json.Decode.map (build << JList) (Json.Decode.list (Json.Decode.lazy (\() -> toDecoder keypath)))
+                , Json.Decode.map (build << JObject) (Json.Decode.keyValuePairs (Json.Decode.lazy (\() -> toDecoder keypath)))
+                , Json.Decode.null (build JNull)
+                , Json.Decode.map (build << JTime) Iso8601.decoder
+                ]
+        )
 
 
+
+-- Retrieving values from a `JValue`
+
+
+{-| From a `Node`, get all possible `Node`s.
+-}
+toNodes : Node -> List Node
+toNodes node =
+    case node.value of
+        JString _ ->
+            List.singleton node
+
+        JInt _ ->
+            List.singleton node
+
+        JFloat _ ->
+            List.singleton node
+
+        JBool _ ->
+            List.singleton node
+
+        JTime _ ->
+            List.singleton node
+
+        JList nodes ->
+            node :: List.concatMap toNodes nodes
+
+        JObject objects ->
+            node :: List.concatMap (Tuple.second >> toNodes) objects
+
+        JNull ->
+            List.singleton node
+
+
+{-| Try to get a `String` from a `JValue`.
+-}
+toString : JValue -> Maybe String
+toString =
+    fromJValue >> .string
+
+
+{-| Try to get a `Int` from a `JValue`.
+-}
+toInt : JValue -> Maybe Int
+toInt =
+    fromJValue >> .int
+
+
+{-| Try to get a `Float` from a `JValue`.
+-}
+toFloat : JValue -> Maybe Float
+toFloat =
+    fromJValue >> .float
+
+
+{-| Try to get a `Bool` from a `JValue`.
+-}
+toBool : JValue -> Maybe Bool
+toBool =
+    fromJValue >> .bool
+
+
+{-| Try to get a `Time` from a `JValue`.
+-}
+toTime : JValue -> Maybe Time.Posix
+toTime =
+    fromJValue >> .time
+
+
+{-| Try to get a `List Node` from a `JValue`.
+-}
+toList : JValue -> Maybe (List Node)
+toList =
+    fromJValue >> .list
+
+
+{-| Try to get a `List (String, Node)` from a `JValue`, where the `String`
+value is the name of the field in the object.
+-}
+toObject : JValue -> Maybe (List ( String, Node ))
+toObject =
+    fromJValue >> .object
+
+
+{-| Try to see if a `JValue` contains a JSON `null`.
+-}
+toNull : JValue -> Maybe ()
+toNull =
+    fromJValue >> .null
+
+
+
+-- Viewing a `Node`
+
+
+{-| Combinator that allows you to build a view function that renders a `Node`; i.e., if _you_ can provide all of the functions
+to destructure a `Node`, we can display it for you!
+-}
 view :
     { string : String -> Html.Html msg
     , int : Int -> Html.Html msg
@@ -247,16 +313,16 @@ view :
     , null : Html.Html msg
     , list : List (Html.Html msg) -> Html.Html msg
     , object : { key : String, value : Html.Html msg } -> Html.Html msg
-    , withKeyPath : Maybe (String -> Html.Html msg -> Html.Html msg)
+    , withKeypath : Maybe (String -> Html.Html msg -> Html.Html msg)
     , withOnClick : Maybe (Node -> msg)
     }
     -> Node
     -> Html.Html msg
-view ({ string, int, float, bool, time, null, list, object, withKeyPath, withOnClick } as funcs) node =
+view ({ string, int, float, bool, time, null, list, object, withKeypath, withOnClick } as funcs) node =
     let
-        maybeWithKeyPath : Html.Html msg -> Html.Html msg
-        maybeWithKeyPath =
-            Maybe.map ((|>) (keyPathToString node.keyPath)) withKeyPath
+        maybeWithKeypath : Html.Html msg -> Html.Html msg
+        maybeWithKeypath =
+            Maybe.map ((|>) (Json.InElm.Keypath.toString node.keypath)) withKeypath
                 |> Maybe.withDefault identity
 
         maybeWithOnClick : Html.Html msg -> Html.Html msg
@@ -268,7 +334,7 @@ view ({ string, int, float, bool, time, null, list, object, withKeyPath, withOnC
                 withOnClick
                 |> Maybe.withDefault html
     in
-    maybeWithKeyPath <|
+    maybeWithKeypath <|
         case node.value of
             JString value ->
                 maybeWithOnClick <| string value
@@ -299,3 +365,134 @@ view ({ string, int, float, bool, time, null, list, object, withKeyPath, withOnC
                             object { key = k, value = view funcs v }
                         )
                         value
+
+
+
+-- Internals
+
+
+withPath : Keypath -> Node -> Node
+withPath keypath node =
+    let
+        withPathSoFar : Node
+        withPathSoFar =
+            { node
+                | keypath = keypath
+            }
+    in
+    case node.value of
+        JString _ ->
+            withPathSoFar
+
+        JInt _ ->
+            withPathSoFar
+
+        JFloat _ ->
+            withPathSoFar
+
+        JBool _ ->
+            withPathSoFar
+
+        JNull ->
+            withPathSoFar
+
+        JTime _ ->
+            withPathSoFar
+
+        JList value ->
+            { withPathSoFar
+                | value =
+                    JList
+                        (List.indexedMap (\k v -> withPath (Json.InElm.Keypath.index k keypath) v) value)
+            }
+
+        JObject value ->
+            { withPathSoFar
+                | value =
+                    JObject
+                        (List.map
+                            (\( k, v ) ->
+                                ( k, withPath (Json.InElm.Keypath.at k keypath) v )
+                            )
+                            value
+                        )
+            }
+
+
+toJProp : JValue -> Maybe JProp
+toJProp jValue =
+    case jValue of
+        JString _ ->
+            Just PString
+
+        JInt _ ->
+            Just PInt
+
+        JFloat _ ->
+            Just PFloat
+
+        JBool _ ->
+            Just PBool
+
+        JNull ->
+            Just PNull
+
+        JTime _ ->
+            Just PTime
+
+        JList _ ->
+            Nothing
+
+        JObject _ ->
+            Nothing
+
+
+fromJValue :
+    JValue
+    ->
+        { string : Maybe String
+        , int : Maybe Int
+        , float : Maybe Float
+        , bool : Maybe Bool
+        , time : Maybe Time.Posix
+        , list : Maybe (List Node)
+        , object : Maybe (List ( String, Node ))
+        , null : Maybe ()
+        }
+fromJValue jvalue =
+    let
+        acc =
+            { string = Nothing
+            , int = Nothing
+            , float = Nothing
+            , bool = Nothing
+            , time = Nothing
+            , list = Nothing
+            , object = Nothing
+            , null = Nothing
+            }
+    in
+    case jvalue of
+        JString value ->
+            { acc | string = Just value }
+
+        JInt value ->
+            { acc | int = Just value }
+
+        JFloat value ->
+            { acc | float = Just value }
+
+        JBool value ->
+            { acc | bool = Just value }
+
+        JTime value ->
+            { acc | time = Just value }
+
+        JList value ->
+            { acc | list = Just value }
+
+        JObject value ->
+            { acc | object = Just value }
+
+        JNull ->
+            { acc | null = Just () }

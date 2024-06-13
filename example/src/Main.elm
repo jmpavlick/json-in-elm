@@ -61,7 +61,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         ClickedNode node ->
-            ( Maybe.map (always { model | nodes = node :: model.nodes }) node.jType
+            ( Maybe.map (always { model | nodes = node :: model.nodes }) node.jProp
                 |> Maybe.withDefault model
             , Cmd.none
             )
@@ -159,13 +159,13 @@ viewSelectedNode node =
                     [ Html.Attributes.class "table table-bordered table-sm"
                     ]
                     [ Html.tr [] [ Html.td [] [ toPre <| key ++ ":" ], Html.td [] [ value ] ] ]
-        , withKeyPath =
+        , withKeypath =
             Just
-                (\keyPath html ->
+                (\keypath html ->
                     Html.table [ Html.Attributes.class "table table-bordered table-sm" ]
                         [ Html.tr []
-                            [ Html.td [] [ Html.text <| "Path: " ++ keyPath ]
-                            , Maybe.map (\t -> Html.td [] [ Html.text <| "Type: " ++ Debug.toString t ]) node.jType
+                            [ Html.td [] [ Html.text <| "Path: " ++ keypath ]
+                            , Maybe.map (\t -> Html.td [] [ Html.text <| "Type: " ++ Debug.toString t ]) node.jProp
                                 |> Maybe.withDefault (Html.text "")
                             , Html.td [] [ html ]
                             ]
@@ -205,6 +205,6 @@ viewAllNodes =
                     [ Html.Attributes.class "table table-bordered table-sm"
                     ]
                     [ Html.tr [] [ Html.td [] [ toPre <| key ++ ":" ], Html.td [] [ value ] ] ]
-        , withKeyPath = Nothing
+        , withKeypath = Nothing
         , withOnClick = Just ClickedNode
         }
