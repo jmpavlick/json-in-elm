@@ -180,13 +180,23 @@ type alias Node =
 
 {-| Parse a `Json.Decode.Value` to a `Node`.
 -}
-parseValue : Json.Decode.Value -> Result Json.Decode.Error Node
-parseValue =
-    Json.Decode.decodeValue
-        (Json.Decode.map
-            (withPath Json.InElm.Keypath.init)
-            (toDecoder Json.InElm.Keypath.init)
-        )
+parseValue : Json.Decode.Value -> Node
+parseValue value =
+    let
+        result =
+            Json.Decode.decodeValue
+                (Json.Decode.map
+                    (withPath Json.InElm.Keypath.init)
+                    (toDecoder Json.InElm.Keypath.init)
+                )
+                value
+    in
+    case result of
+        Ok node ->
+            node
+
+        Err _ ->
+            parseValue value
 
 
 {-| Parse a `Json.Decode.Value` to a `Node`, at a given `KeyPath`.
@@ -201,7 +211,7 @@ parseValueAt keypath =
 parseJsonString : String -> Result Json.Decode.Error Node
 parseJsonString =
     Json.Decode.decodeString Json.Decode.value
-        >> Result.andThen parseValue
+        >> Result.map parseValue
 
 
 {-| Create a decoder to a `Node`, given a `Keypath`.
