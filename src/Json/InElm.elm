@@ -1,14 +1,14 @@
 module Json.InElm exposing
-    ( JValue(..)
+    ( Node
+    , JValue(..)
     , JProp(..)
     , JStructure(..)
     , Keypath
     , JTag(..)
     , Schema
-    , Node
-    , parseJsonString
     , parseValue
     , parseValueAt
+    , parseJsonString
     , toDecoder
     , toNodes
     , toString
@@ -34,20 +34,20 @@ A "JSON document", here, is described as:
 
 For convenience, even though it's not in the JSON spec, I have included ISO8601 timestamp values as a "JSON property type".
 
+@docs Node
 @docs JValue
 @docs JProp
 @docs JStructure
 @docs Keypath
 @docs JTag
 @docs Schema
-@docs Node
 
 
 # Parsing
 
-@docs parseJsonString
 @docs parseValue
 @docs parseValueAt
+@docs parseJsonString
 @docs toDecoder
 
 
