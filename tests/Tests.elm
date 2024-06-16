@@ -4,6 +4,7 @@ import Expect
 import Json.Decode
 import Json.Encode
 import Json.InElm
+import Json.InElm.Codec
 import Json.InElm.Keypath
 import Test exposing (Test)
 
@@ -136,7 +137,7 @@ parseJsonString =
                 Expect.ok nodeResult
         , Test.test "and the output should be a `Node` with an empty `KeyPath`" <|
             \_ ->
-                Result.map .keypath nodeResult
+                Result.map (.schema >> .keypath) nodeResult
                     |> Expect.equal (Ok Json.InElm.Keypath.init)
         , Test.test "and the `Node`'s `value` should have type `JObject`" <|
             \_ ->
@@ -153,10 +154,7 @@ toNodes =
         unsafeNode : Json.InElm.Node
         unsafeNode =
             Json.InElm.parseJsonString rawJson
-                |> Result.map always
-                |> Result.withDefault
-                    (\_ -> Debug.todo "don't actually do this in real life, okay?")
-                |> (\func -> func ())
+                |> accursedUnutterable
     in
     Test.describe "Json.InElm.toNodes should get all possible `Node`s from a given `Node`"
         [ Test.test "when the top-level `Node` is a `JObject`" <|
@@ -164,4 +162,46 @@ toNodes =
                 Json.InElm.toNodes unsafeNode
                     |> List.length
                     |> Expect.greaterThan 1
+        ]
+
+
+accursedUnutterable : Result x a -> a
+accursedUnutterable =
+    Result.map always
+        >> Result.mapError (Debug.log "error from accursedUnutterable")
+        >> Result.withDefault
+            (\_ -> Debug.todo "")
+        >> (\func -> func ())
+
+
+codecSchema : Test
+codecSchema =
+    let
+        keypath : Json.InElm.Keypath
+        keypath =
+            Json.InElm.Keypath.init
+                |> Json.InElm.Keypath.at "hello"
+                |> Json.InElm.Keypath.at "world"
+                |> Json.InElm.Keypath.at "how"
+                |> Json.InElm.Keypath.index 0
+                |> Json.InElm.Keypath.at "are"
+                |> Json.InElm.Keypath.at "you"
+
+        jTag : Json.InElm.JTag
+        jTag =
+            Json.InElm.Structure Json.InElm.SObject
+
+        baseValue : Json.InElm.Schema
+        baseValue =
+            { keypath = keypath
+            , tag = jTag
+            }
+    in
+    Test.describe "Json.InElm.Codec.schema should"
+        [ Test.test "encode a Json.InElm.Schema to a JSON value" <|
+            \_ ->
+                Json.InElm.Codec.schema.encode baseValue
+                    |> Json.Decode.decodeValue Json.InElm.Codec.schema.decoder
+                    |> accursedUnutterable
+                    |> Expect.equal baseValue
         ]

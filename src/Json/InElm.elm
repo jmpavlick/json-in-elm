@@ -1,7 +1,10 @@
 module Json.InElm exposing
     ( JValue(..)
     , JProp(..)
+    , JStructure(..)
     , Keypath
+    , JTag(..)
+    , Schema
     , Node
     , parseJsonString
     , parseValue
@@ -33,7 +36,10 @@ For convenience, even though it's not in the JSON spec, I have included ISO8601 
 
 @docs JValue
 @docs JProp
+@docs JStructure
 @docs Keypath
+@docs JTag
+@docs Schema
 @docs Node
 
 
@@ -70,12 +76,14 @@ import Html.Events
 import Iso8601
 import Json.Decode
 import Json.Encode
+import Json.InElm.Internal
 import Json.InElm.Keypath
 import Json.InElm.Keypath.Internal
 import Time
 
 
 
+-- testing something here
 -- JSON Document and Property Types
 
 
@@ -117,6 +125,23 @@ type JProp
     | PNull
 
 
+{-| A `JStructure` represents a property that has a structural type (i.e., a list or an object) within a JSON document.
+-}
+type JStructure
+    = SObject
+    | SList
+
+
+{-| A `JTag` is a "tag" that is used to store the type of a given property (scalar or structural) in a JSON document.
+
+`Json.InElm` doesn't actually _need_ to store this information in order to parse a JSON document, since it can be inferred directly from incoming data; however, it can be helpful to store this information for later retrieval and evaluation, so a type `JTag` that unions `JProp`s and `JStructure`s is provided.
+
+-}
+type JTag
+    = Prop JProp
+    | Structure JStructure
+
+
 {-| A `Keypath` is a data structure that stores the JSON path to a value of a given key.
 
 Elements in a `Keypath` are either the name of a field, or the index of an array.
@@ -128,6 +153,14 @@ type alias Keypath =
     Json.InElm.Keypath.Internal.Keypath
 
 
+{-| A `Schema` describes the type of, and path to, a given `Node`.
+-}
+type alias Schema =
+    { keypath : Keypath
+    , tag : JTag
+    }
+
+
 {-| A `Node` is a reprentation of part of a JSON document, along with everything that is inside of it,
 along with its "key path", which is its location within a JSON document.
 
@@ -137,8 +170,7 @@ that `Node`'s `JValue` may have other `Node`s inside of it.
 -}
 type alias Node =
     { value : JValue
-    , keypath : Keypath
-    , jProp : Maybe JProp
+    , schema : Schema
     }
 
 
@@ -151,8 +183,10 @@ type alias Node =
 parseValue : Json.Decode.Value -> Result Json.Decode.Error Node
 parseValue =
     Json.Decode.decodeValue
-        --(Json.Decode.map (withPath Json.InElm.Keypath.init) nodeDecoder)
-        (Json.Decode.map (withPath Json.InElm.Keypath.init) (toDecoder Json.InElm.Keypath.init))
+        (Json.Decode.map
+            (withPath Json.InElm.Keypath.init)
+            (toDecoder Json.InElm.Keypath.init)
+        )
 
 
 {-| Parse a `Json.Decode.Value` to a `Node`, at a given `KeyPath`.
@@ -187,8 +221,7 @@ toDecoder keypath =
 
         build v =
             { value = v
-            , keypath = keypath
-            , jProp = toJProp v
+            , schema = Schema keypath <| toJTag v
             }
     in
     Json.Decode.lazy
@@ -322,7 +355,7 @@ view ({ string, int, float, bool, time, null, list, object, withKeypath, withOnC
     let
         maybeWithKeypath : Html.Html msg -> Html.Html msg
         maybeWithKeypath =
-            Maybe.map ((|>) (Json.InElm.Keypath.toString node.keypath)) withKeypath
+            Maybe.map ((|>) (Json.InElm.Keypath.toString node.schema.keypath)) withKeypath
                 |> Maybe.withDefault identity
 
         maybeWithOnClick : Html.Html msg -> Html.Html msg
@@ -377,7 +410,8 @@ withPath keypath node =
         withPathSoFar : Node
         withPathSoFar =
             { node
-                | keypath = keypath
+                | schema =
+                    (\schema -> { schema | keypath = keypath }) node.schema
             }
     in
     case node.value of
@@ -445,6 +479,34 @@ toJProp jValue =
 
         JObject _ ->
             Nothing
+
+
+toJTag : JValue -> JTag
+toJTag jValue =
+    case jValue of
+        JString _ ->
+            Prop PString
+
+        JInt _ ->
+            Prop PInt
+
+        JFloat _ ->
+            Prop PFloat
+
+        JBool _ ->
+            Prop PBool
+
+        JNull ->
+            Prop PNull
+
+        JTime _ ->
+            Prop PTime
+
+        JList _ ->
+            Structure SList
+
+        JObject _ ->
+            Structure SObject
 
 
 fromJValue :
