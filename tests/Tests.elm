@@ -124,7 +124,7 @@ parseJsonString =
             Result.toMaybe nodeResult
                 |> Maybe.andThen (.value >> Json.InElm.toObject)
                 |> Result.fromMaybe ()
-                |> Debug.log ""
+                |> Debug.log "readme output"
 
         objectFields : List String
         objectFields =
