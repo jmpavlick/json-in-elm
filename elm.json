@@ -3,7 +3,7 @@
     "name": "jmpavlick/json-in-elm",
     "summary": "Work with arbitrary JSON values, in Elm",
     "license": "MIT",
-    "version": "1.0.1",
+    "version": "2.0.0",
     "exposed-modules": [
         "Json.InElm",
         "Json.InElm.Keypath",
